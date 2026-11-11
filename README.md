@@ -39,3 +39,4 @@ Then open http://127.0.0.1:8000/cases in your browser.
 - RAG: Chroma + LLM API (from Week 5)
 - Testing: pytest
 - Frontend: HTML (currently learning)
+
