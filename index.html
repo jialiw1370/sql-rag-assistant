@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SQL RAG Assistant</title>
+</head>
+<body>
+  <h1>SQL RAG Assistant</h1>
+  <p>Pick a case, write your SQL, and check it.</p>
+
+  <h2>Cases</h2>
+  <ul id="cases"></ul>
+
+  <h2>Try it</h2>
+  <label for="case-id">Case:</label>
+  <select id="case-id"></select>
+
+  <p id="question"></p>
+
+  <label for="sql">Your SQL:</label><br>
+  <textarea id="sql" rows="3" cols="60" placeholder="SELECT Name FROM Customers;"></textarea><br>
+  <button id="check">Check</button>
+
+  <p id="result"></p>
+
+  <script>
+    async function loadCases() {
+      const res = await fetch("/cases");
+      const cases = await res.json();
+      const list = document.getElementById("cases");
+      const select = document.getElementById("case-id");
+      cases.forEach((c) => {
+        const li = document.createElement("li");
+        li.textContent = c.id + ". " + c.title + " — " + c.question;
+        list.appendChild(li);
+        const opt = document.createElement("option");
+        opt.value = c.id;
+        opt.textContent = c.id + ". " + c.title;
+        select.appendChild(opt);
+      });
+      showQuestion();
+    }
+
+    async function showQuestion() {
+      const id = document.getElementById("case-id").value;
+      const res = await fetch("/cases/" + id);
+      const c = await res.json();
+      document.getElementById("question").textContent = c.question;
+    }
+
+    async function checkSql() {
+      const id = document.getElementById("case-id").value;
+      const sql = document.getElementById("sql").value;
+      const res = await fetch("/cases/" + id + "/check", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({sql: sql})
+      });
+      const data = await res.json();
+      let text = data.message;
+      if (data.expected) {
+        text += " Expected: " + data.expected;
+      }
+      document.getElementById("result").textContent = text;
+    }
+
+    document.getElementById("case-id").addEventListener("change", showQuestion);
+    document.getElementById("check").addEventListener("click", checkSql);
+    loadCases();
+  </script>
+</body>
+</html>

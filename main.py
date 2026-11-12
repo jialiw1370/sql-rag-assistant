@@ -1,9 +1,11 @@
-# Day 4 (Thu 11/12): main.py — FastAPI app for the SQL RAG Assistant
-# This file REPLACES the Day 3 main.py in the repo root (same filename,
-# new version). Copy only this file to the sql-rag-assistant folder,
-# next to schema.sql. Do not push the day-4-en folder itself.
+# Day 5 (Fri 11/13): main.py — FastAPI app for the SQL RAG Assistant
+# This file REPLACES the Day 4 main.py in the repo root (same filename,
+# new version). Copy only this file, plus index.html, to the
+# sql-rag-assistant folder, next to schema.sql. Do not push the
+# day-5-en folder itself.
 #
-# New in Day 4:
+# New in Day 5:
+#   GET  /page              -> serves index.html (the simple HTML page)
 #   GET  /cases/{id}        -> one case by id (404 if the id does not exist)
 #   POST /cases/{id}/check  -> submit SQL, get back correct / incorrect
 #   GET  / and GET /cases   -> unchanged from Day 3
@@ -18,16 +20,16 @@
 #   against. A text comparison is the honest Day 4 version; running SQL
 #   against real tables comes later, once there is data for them.
 #
-# Usage (in the sql-rag-assistant repo root, after Day 3 is done):
+# Usage (in the sql-rag-assistant repo root, after Day 4 is done):
 #   pip install -r requirements.txt
 #   uvicorn main:app --reload
 # Then open in your browser:
-#   http://127.0.0.1:8000/cases/1          -> Case 1 as JSON
-#   http://127.0.0.1:8000/docs            -> try POST /cases/{id}/check here:
-#     open POST /cases/1/check, click "Try it out", send
-#     {"sql": "SELECT Name FROM Customers;"} and check "correct": true.
-#     A browser address bar can only do GET, so use /docs to test POST.
-# Commit message: add case detail and SQL check endpoint
+#   http://127.0.0.1:8000/page          -> the HTML page (use this, not
+#     double-clicking index.html, so the page and the API share one
+#     address and the browser does not block the calls)
+#   http://127.0.0.1:8000/cases/1      -> Case 1 as JSON
+#   http://127.0.0.1:8000/docs        -> try POST /cases/{id}/check here
+# Commit message: add simple HTML page to list cases and submit SQL
 #
 # Note: this file only reads the cases Day 2 put into sql_rag.db.
 # It does not invent any case titles, questions, or SQL.
@@ -39,6 +41,7 @@ import sqlite3
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 app = FastAPI(title="SQL RAG Assistant")
@@ -102,6 +105,11 @@ class CheckRequest(BaseModel):
 @app.get("/")
 def read_root():
     return {"message": "Hello, SQL RAG Assistant!"}
+
+
+@app.get("/page")
+def read_page():
+    return FileResponse(Path(__file__).resolve().parent / "index.html")
 
 
 @app.get("/cases")
