@@ -1,23 +1,16 @@
--- Day 6 (Sat 11/14): schema.sql — Put the first 8 cases from the book into SQLite
--- This file REPLACES the Day 2 schema.sql in the repo root (same filename,
--- new version with 8 cases instead of 3). Copy only this file to the
--- sql-rag-assistant folder, next to main.py. Do not push the day-6-en
--- folder itself.
---
--- After replacing it, rebuild the database locally (the old sql_rag.db
--- still has only 3 cases, so delete it first, then rebuild):
+-- Day 8: schema.sql — Add Cases 9-13 from the book (13 cases total)
+-- This file REPLACES the Day 6 schema.sql in the repo root.
+-- After replacing it, rebuild the database locally:
 --   del sql_rag.db
 --   py build_db.py
--- Or with the sqlite3 tool, if you have it:
---   sqlite3 sql_rag.db < schema.sql
--- Note: *.db is already in the Day 1 .gitignore, so it will not be pushed.
--- Verify: python -c "import sqlite3; print(sqlite3.connect('sql_rag.db').execute('SELECT count(*) FROM cases').fetchone())"
---   should print (8,)
--- Commit message: add 5 more cases and first pytest
+-- Verify count should be (13,)
+-- Commit message: add cases 9 to 13
 --
--- Source: "SQL Detective Cases: A Beginner's Guide to SQL for Kids" (2026)
--- Cases 1-8 copied verbatim. The question and answer SQL for each case are
--- from that case's "Today's Challenge" section in the book.
+-- Source: "SQL Detective Cases" (2026), Cases 9-13 verbatim from
+-- each case's "Today's Challenge" section.
+-- NOTE Case 13 uses ILIKE, which SQLite does not support for real
+-- execution. The current checker compares answer text, so it is
+-- fine for now; flag it when the checker starts executing SQL.
 
 CREATE TABLE IF NOT EXISTS cases (
     id INTEGER PRIMARY KEY,
@@ -57,3 +50,23 @@ INSERT INTO cases (id, title, question, answer_sql) VALUES
 -- Case 8: Use AVG to Find the Average
 INSERT INTO cases (id, title, question, answer_sql) VALUES
 (8, 'Use AVG to Find the Average', 'Find the average math score.', 'SELECT AVG(Math_score) FROM Students;');
+
+-- Case 9: Use MIN and MAX to Find the Smallest and Largest Values
+INSERT INTO cases (id, title, question, answer_sql) VALUES
+(9, 'Use MIN and MAX to Find the Smallest and Largest Values', 'Find the largest class size.', 'SELECT MAX(Number_of_people) FROM Enrollment;');
+
+-- Case 10: Use AND to Find Data That Matches Two Conditions
+INSERT INTO cases (id, title, question, answer_sql) VALUES
+(10, 'Use AND to Find Data That Matches Two Conditions', 'Find the book that is published in 1952 and is in English.', 'SELECT Title FROM Books WHERE Published_year = 1952 AND Language = ''English'';');
+
+-- Case 11: Use OR to Match Either Condition
+INSERT INTO cases (id, title, question, answer_sql) VALUES
+(11, 'Use OR to Match Either Condition', 'Find books that are Chinese or available.', 'SELECT Title FROM Books WHERE Language = ''Chinese'' OR Available = ''Yes'';');
+
+-- Case 12: Use IN to Match One Value from a List
+INSERT INTO cases (id, title, question, answer_sql) VALUES
+(12, 'Use IN to Match One Value from a List', 'Find pets that are 2 or 4 years old.', 'SELECT * FROM Pets WHERE Age IN (2, 4);');
+
+-- Case 13: Use LIKE to Find Keywords
+INSERT INTO cases (id, title, question, answer_sql) VALUES
+(13, 'Use LIKE to Find Keywords', 'Find toys that start with H, ignoring uppercase and lowercase letters.', 'SELECT * FROM Toys WHERE ToyName ILIKE ''h%'';');
