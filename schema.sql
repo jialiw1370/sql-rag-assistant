@@ -1,12 +1,12 @@
--- Day 8: schema.sql — Add Cases 9-13 from the book (13 cases total)
--- This file REPLACES the Day 6 schema.sql in the repo root.
+-- Day 9: schema.sql — Add Cases 14-18 from the book (18 cases total)
+-- This file REPLACES the Day 8 schema.sql in the repo root.
 -- After replacing it, rebuild the database locally:
 --   del sql_rag.db
 --   py build_db.py
--- Verify count should be (13,)
--- Commit message: add cases 9 to 13
+-- Verify count should be (18,)
+-- Commit message: add cases 14 to 18
 --
--- Source: "SQL Detective Cases" (2026), Cases 9-13 verbatim from
+-- Source: "SQL Detective Cases" (2026), Cases 14-18 verbatim from
 -- each case's "Today's Challenge" section.
 -- NOTE Case 13 uses ILIKE, which SQLite does not support for real
 -- execution. The current checker compares answer text, so it is
@@ -70,3 +70,23 @@ INSERT INTO cases (id, title, question, answer_sql) VALUES
 -- Case 13: Use LIKE to Find Keywords
 INSERT INTO cases (id, title, question, answer_sql) VALUES
 (13, 'Use LIKE to Find Keywords', 'Find toys that start with H, ignoring uppercase and lowercase letters.', 'SELECT * FROM Toys WHERE ToyName ILIKE ''h%'';');
+
+-- Case 14: Use BETWEEN to Find Values in a Range
+INSERT INTO cases (id, title, question, answer_sql) VALUES
+(14, 'Use BETWEEN to Find Values in a Range', 'Find all the toys that cost between 70 and 100 dollars, including 70 and 100.', 'SELECT * FROM Toys WHERE Price BETWEEN 70 AND 100;');
+
+-- Case 15: The Magic of GROUP BY
+INSERT INTO cases (id, title, question, answer_sql) VALUES
+(15, 'The Magic of GROUP BY', 'Using the new Icecream table above, find out how many ice creams were sold for each size.', 'SELECT Size, COUNT(*) FROM Icecream GROUP BY Size;');
+
+-- Case 16: Use HAVING to Filter Groups
+INSERT INTO cases (id, title, question, answer_sql) VALUES
+(16, 'Use HAVING to Filter Groups', 'Show only the categories with an average price greater than 10 dollars.', 'SELECT Category, AVG(Price) FROM MenuPrices GROUP BY Category HAVING AVG(Price) > 10;');
+
+-- Case 17: Use JOIN to Match Tables
+INSERT INTO cases (id, title, question, answer_sql) VALUES
+(17, 'Use JOIN to Match Tables', 'Which teacher teaches each student''s club?', 'SELECT Clubs.Student, Clubs.StudentID, Clubs.Club, ClubTeachers.Teacher FROM Clubs JOIN ClubTeachers ON Clubs.Club = ClubTeachers.Club;');
+
+-- Case 18: Use LEFT JOIN to Match Tables
+INSERT INTO cases (id, title, question, answer_sql) VALUES
+(18, 'Use LEFT JOIN to Match Tables', 'Join the Movies table with the Actors table using LEFT JOIN.', 'SELECT Movies.MovieID, Movies.Movie, Actors.Actor FROM Movies LEFT JOIN Actors ON Movies.MovieID = Actors.MovieID;');
