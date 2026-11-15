@@ -1,54 +1,48 @@
-# Day 5 (Fri 11/13): main.py — FastAPI app for the SQL RAG Assistant
-# This file REPLACES the Day 4 main.py in the repo root (same filename,
-# new version). Copy only this file, plus index.html, to the
-# sql-rag-assistant folder, next to schema.sql. Do not push the
-# day-5-en folder itself.
+# Day 15: main.py — FastAPI app with vector search (SQL RAG Assistant)
+# This file REPLACES the Day 5 main.py in the repo root (same filename,
+# new version). Copy only this file to the sql-rag-assistant folder,
+# next to schema.sql. Do not push the day-15-en folder itself.
 #
-# New in Day 5:
-#   GET  /page              -> serves index.html (the simple HTML page)
-#   GET  /cases/{id}        -> one case by id (404 if the id does not exist)
-#   POST /cases/{id}/check  -> submit SQL, get back correct / incorrect
-#   GET  / and GET /cases   -> unchanged from Day 3
+# New in Day 15:
+#   GET  /search?q=...      -> top 3 vector matches from Chroma
+#                              (id, title, question, answer_sql) as JSON
+#   GET  / and GET /cases, GET /cases/{id}, POST /cases/{id}/check,
+#   GET  /page              -> unchanged from Day 5
 #
-# How the checker works (simplest version):
-#   It compares your SQL with the book's answer SQL as text — lowercased,
-#   extra spaces collapsed, spaces around "=" ignored, trailing semicolon
-#   ignored — so "select name from customers" counts as correct for
-#   Case 1, and "name='Leo'" counts as correct for Case 3.
-#   It does NOT run your SQL against a sample table, because the book's
-#   cases (Customers, Clients, Trainers) ship no sample data to run
-#   against. A text comparison is the honest Day 4 version; running SQL
-#   against real tables comes later, once there is data for them.
+# Prerequisite: Day 13 must have run once so ./chroma_db exists:
+#   py embed_cases.py
+# If chroma_db/ is missing, /search returns 503 with a clear message
+# instead of crashing the whole app — /cases keeps working either way.
 #
-# Usage (in the sql-rag-assistant repo root, after Day 4 is done):
-#   pip install -r requirements.txt
-#   uvicorn main:app --reload
+# Usage (in the sql-rag-assistant repo root, after Day 14 is done):
+#   py -m uvicorn main:app --reload
 # Then open in your browser:
-#   http://127.0.0.1:8000/page          -> the HTML page (use this, not
-#     double-clicking index.html, so the page and the API share one
-#     address and the browser does not block the calls)
-#   http://127.0.0.1:8000/cases/1      -> Case 1 as JSON
-#   http://127.0.0.1:8000/docs        -> try POST /cases/{id}/check here
-# Commit message: add simple HTML page to list cases and submit SQL
+#   http://127.0.0.1:8000/search?q=How%20do%20I%20write%20a%20JOIN%3F
+#   http://127.0.0.1:8000/cases      -> still returns all 18 cases
+#   http://127.0.0.1:8000/docs       -> try /search here too
+# Commit message: add vector search endpoint
 #
-# Note: this file only reads the cases Day 2 put into sql_rag.db.
-# It does not invent any case titles, questions, or SQL.
-# If sql_rag.db does not exist yet, run Day 2 first:
-#   sqlite3 sql_rag.db < schema.sql
+# Note: this file only reads the cases Day 2 put into sql_rag.db and
+# the vectors Day 13 put into chroma_db/. It does not invent any case
+# titles, questions, or SQL.
 
 import re
 import sqlite3
 from pathlib import Path
 
+import chromadb
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 app = FastAPI(title="SQL RAG Assistant")
 
+BASE_DIR = Path(__file__).resolve().parent
 # sql_rag.db lives in the repo root, next to this file.
 # *.db is already in the Day 1 .gitignore, so it will not be pushed to GitHub.
-DB_PATH = Path(__file__).resolve().parent / "sql_rag.db"
+DB_PATH = BASE_DIR / "sql_rag.db"
+CHROMA_PATH = BASE_DIR / "chroma_db"
+COLLECTION_NAME = "sql_cases"
 
 
 def get_connection():
@@ -98,6 +92,38 @@ def normalize_sql(sql: str) -> str:
     return re.sub(r"\s*=\s*", "=", text)
 
 
+def search_cases(question: str, top_n: int = 3):
+    """Vector-search Chroma, then load the full cases from SQLite.
+
+    Chroma only stores the case id (plus title metadata), so the
+    full question/answer_sql always comes from sql_rag.db — one
+    source of truth, in Chroma's relevance order.
+    """
+    if not CHROMA_PATH.exists():
+        raise HTTPException(
+            status_code=503,
+            detail="Vector store not found. Run Day 13 first: py embed_cases.py",
+        )
+    try:
+        client = chromadb.PersistentClient(path=str(CHROMA_PATH))
+        collection = client.get_collection(COLLECTION_NAME)
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"Collection '{COLLECTION_NAME}' not found in chroma_db/. "
+                "Re-run: py embed_cases.py"
+            ),
+        )
+    results = collection.query(query_texts=[question], n_results=top_n)
+    hits = []
+    for case_id in results["ids"][0]:
+        case = get_case(int(case_id))
+        if case is not None:
+            hits.append(case)
+    return hits
+
+
 class CheckRequest(BaseModel):
     sql: str
 
@@ -109,12 +135,17 @@ def read_root():
 
 @app.get("/page")
 def read_page():
-    return FileResponse(Path(__file__).resolve().parent / "index.html")
+    return FileResponse(BASE_DIR / "index.html")
 
 
 @app.get("/cases")
 def read_cases():
     return get_cases()
+
+
+@app.get("/search")
+def read_search(q: str):
+    return search_cases(q)
 
 
 @app.get("/cases/{case_id}")
