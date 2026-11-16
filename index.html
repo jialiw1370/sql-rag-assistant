@@ -1,12 +1,45 @@
+<!-- Day 19: index.html — HTML page with a chat box (SQL RAG Assistant)
+Copy this file to the sql-rag-assistant repo root, next to main.py.
+It REPLACES the Day 5 index.html (same filename, new version).
+Do not push the day-19-en folder itself.
+
+New in Day 19:
+  "Ask a question" box at the top: type a SQL question, click Ask,
+  and the page calls POST /ask (Day 18) and shows the explanation
+  plus the case numbers it was based on. The old case list and
+  SQL checker below it are unchanged.
+
+How it works: the Ask button sends {"question": "..."} to /ask.
+While waiting it shows "Thinking...". If /ask answers, the
+explanation appears in the answer box and the cases used are
+listed under it. If /ask fails (for example no API key, or no
+credits left), the error message from the server is shown instead.
+
+Test it: start the server (py -m uvicorn main:app --reload),
+open http://127.0.0.1:8000/page, ask "How do I write a JOIN?"
+Done when the page shows an explanation that names Case 17 or 18.
+Commit message: add chat box to HTML page
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <title>SQL RAG Assistant</title>
+  <style>
+    #answer { white-space: pre-wrap; }
+  </style>
 </head>
 <body>
   <h1>SQL RAG Assistant</h1>
-  <p>Pick a case, write your SQL, and check it.</p>
+  <p>Ask a SQL question, or pick a case, write your SQL, and check it.</p>
+
+  <h2>Ask a question</h2>
+  <label for="ask-input">Your question:</label><br>
+  <textarea id="ask-input" rows="2" cols="60" placeholder="How do I write a JOIN?"></textarea><br>
+  <button id="ask">Ask</button>
+
+  <p id="answer"></p>
+  <p id="used-cases"></p>
 
   <h2>Cases</h2>
   <ul id="cases"></ul>
@@ -24,6 +57,27 @@
   <p id="result"></p>
 
   <script>
+    async function askQuestion() {
+      const question = document.getElementById("ask-input").value;
+      const answerBox = document.getElementById("answer");
+      const usedBox = document.getElementById("used-cases");
+      answerBox.textContent = "Thinking...";
+      usedBox.textContent = "";
+      const res = await fetch("/ask", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({question: question})
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        answerBox.textContent = "Something went wrong: " + data.detail;
+        return;
+      }
+      answerBox.textContent = data.explanation;
+      const names = data.cases.map((c) => "Case " + c.id + ": " + c.title);
+      usedBox.textContent = "Based on: " + names.join(" | ");
+    }
+
     async function loadCases() {
       const res = await fetch("/cases");
       const cases = await res.json();
@@ -64,6 +118,7 @@
       document.getElementById("result").textContent = text;
     }
 
+    document.getElementById("ask").addEventListener("click", askQuestion);
     document.getElementById("case-id").addEventListener("change", showQuestion);
     document.getElementById("check").addEventListener("click", checkSql);
     loadCases();
