@@ -1,0 +1,22 @@
+# Render Blueprint for the SQL RAG Assistant (deploy step)
+# Copy this file to the sql-rag-assistant repo root, next to main.py.
+# Do not push the deploy-en folder itself.
+#
+# What it does: tells Render to create one free web service from this
+# repo — install from requirements.txt, then start with start.sh
+# (which builds sql_rag.db + chroma_db on first boot and starts the
+# API on Render's $PORT).
+#
+# OPENAI_API_KEY has sync: false, so Render asks you to type the key
+# in the dashboard when you create the service. The key never goes
+# into git, and never into this file.
+
+services:
+  - type: web
+    name: sql-rag-assistant
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash start.sh
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
