@@ -7,6 +7,11 @@ When a user asks a SQL question (for example, "How do I write a JOIN?"), first r
 3 most relevant cases from the 18 by vector similarity, then use an LLM to generate an
 explanation in simple words, based only on those retrieved cases.
 
+**Live demo:** https://sql-rag-assistant-qt3v.onrender.com/page — ask a
+question in the chat box, no setup needed. (Free Render hosting: if the
+page has been idle for 15 minutes it takes about 30–60 seconds to wake
+up on the first visit — that is normal, just wait and refresh if needed.)
+
 ## Current status
 
 Week 1 is done — a working API, checker, HTML page, and first test, with 8 cases.
@@ -138,6 +143,10 @@ This embeds all 18 cases into `chroma_db/` in the repo root.
 `chroma_db/` is local data — it is in `.gitignore`, do not commit it.
 
 ## How to run
+
+Or skip the setup and use the live demo above — same app, hosted on Render.
+
+To run it on your own computer:
 
 ```bash
 py -m uvicorn main:app --reload
