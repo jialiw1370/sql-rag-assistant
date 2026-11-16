@@ -13,6 +13,9 @@ Week 1 is done — a working API, checker, HTML page, and first test, with 8 cas
 Week 2 is done — all 18 cases in the database, 4 tests, and the first retrieval step.
 Week 3 is done — vector retrieval replaces keyword matching, `/search` exposes it in
 the API, and the first LLM call explains the retrieved cases. 6 tests pass.
+Week 4 is done — the HTML page has a chat box that answers with retrieval + LLM
+explanation, and a 10-question evaluation shows vector retrieval beats keyword
+matching on top-1 accuracy (10/10 vs 8/10). 8 tests pass.
 
 - [x] Day 1: Project scaffold — README, requirements, .gitignore
 - [x] Day 2: `schema.sql` + first 3 cases into SQLite
@@ -31,6 +34,10 @@ the API, and the first LLM call explains the retrieved cases. 6 tests pass.
 - [x] Day 15: `GET /search?q=...` endpoint in the API
 - [x] Day 16: First LLM call (`explain.py`, OpenAI `gpt-4o-mini`)
 - [x] Day 17: README explains Week 3 + 2 tests for `/search` (6 tests total)
+- [x] Day 18: `POST /ask` endpoint — retrieval + LLM explanation in one call
+- [x] Day 19: Chat box on the HTML page, wired to `/ask`
+- [x] Day 20: Evaluation — 10 questions, keyword vs vector retrieval
+- [x] Day 21: README explains Week 4 + 2 tests for `/ask` (8 tests total)
 
 All 18 cases in the database, copied verbatim from the book's
 "Today's Challenge" sections:
@@ -67,6 +74,11 @@ The full flow is: question → vector retrieval → LLM explanation.
    naming the case numbers it uses. The model only ever sees your book's cases —
    it explains those, it does not invent new SQL.
 
+`POST /ask` (Day 18) does both steps in one API call and returns
+`{"question", "cases", "explanation"}`. The chat box on the HTML page
+(Day 19) calls it, so anyone can type a question on `/page` and get an
+answer grounded in the book.
+
 For "How do I write a JOIN?", retrieval returns Cases 17, 18, and 1, and the
 explanation names Cases 17 and 18.
 
@@ -81,6 +93,20 @@ worded questions: "How can I combine data from two tables?" contains no word
 Cases 17 and 18 first for that same paraphrased question, and Case 8 first for
 "How do I find the average math score?". That is the whole point of Week 3:
 matching by meaning, not by shared words.
+
+### Evaluation — keyword vs vector, with numbers
+
+`evaluate.py` (Day 20) scores both methods on the same 10 sample questions,
+each with the one case that actually answers it:
+
+- Keyword retrieval: top-1 **8/10**, top-3 **10/10**
+- Vector retrieval: top-1 **10/10**, top-3 **10/10**
+
+Keyword matching gets the expected case into the top 3 every time, but misses
+the #1 spot on two paraphrased questions: "How can I combine data from two
+tables?" (it ranks Case 10 first) and "How do I match rows that meet either of
+two conditions?" (it ranks Case 10 first). Vector retrieval ranks the expected
+case first on all 10. That is the measured difference — not a guess.
 
 ## Setup
 
@@ -121,19 +147,27 @@ Leave that terminal running while you test. Press `CTRL+C` to stop it.
 
 Then open in your browser:
 
-- http://127.0.0.1:8000/page — the HTML page: pick a case, write SQL, check it
+- http://127.0.0.1:8000/page — the HTML page: ask a question in the chat box,
+  or pick a case, write SQL, check it
 - http://127.0.0.1:8000/cases — all 18 cases as JSON
 - http://127.0.0.1:8000/cases/1 — Case 1 as JSON
 - http://127.0.0.1:8000/search?q=How%20do%20I%20write%20a%20JOIN%3F — top 3 vector matches as JSON
 - http://127.0.0.1:8000/docs — try the API here, including
-  `POST /cases/{id}/check` (a browser address bar can only do GET)
+  `POST /cases/{id}/check` and `POST /ask` (a browser address bar can only do GET)
 
 Example check — send `{"sql": "SELECT Name FROM Customers;"}` to
 `POST /cases/1/check` and you get back `{"case_id": 1, "correct": true,
 "message": "Correct!"}`.
 
-If `chroma_db/` is missing, `/search` returns 503 with a message to run
-Day 13 first — `/cases` keeps working either way.
+Example ask — send `{"question": "How do I write a JOIN?"}` to
+`POST /ask` and you get back the question, the top 3 cases, and an
+explanation naming Case 17 or 18.
+
+If `chroma_db/` is missing, `/search` and `/ask` return 503 with a message
+to run Day 13 first — `/cases` keeps working either way. If
+`OPENAI_API_KEY` is not set, `/ask` returns 503 with the `.env`
+instructions; if OpenAI rejects the call (for example no credits left),
+`/ask` returns 502 with OpenAI's message.
 
 ## Retrieval (no server needed)
 
@@ -141,10 +175,13 @@ Day 13 first — `/cases` keeps working either way.
 py retrieve.py
 py retrieve.py "How do I find the average math score?"
 py vector_retrieve.py "How can I combine data from two tables?"
+py evaluate.py
 ```
 
 `retrieve.py` prints the top 3 cases by keyword matching;
-`vector_retrieve.py` prints the top 3 by vector similarity.
+`vector_retrieve.py` prints the top 3 by vector similarity;
+`evaluate.py` prints both methods' scores on the 10 sample questions
+(no API key needed, no LLM call).
 
 ## First LLM call (no server needed)
 
@@ -173,13 +210,16 @@ Done when it prints a short explanation that names Cases 17 and 18.
 py -m pytest
 ```
 
-Done when pytest shows `6 passed`. The tests check that `GET /cases`
+Done when pytest shows `8 passed`. The tests check that `GET /cases`
 returns 18 cases, `GET /cases/18` returns the LEFT JOIN case, a correct
 SQL check returns `correct: true`, a wrong SQL check returns
 `correct: false` with the expected answer, `GET /search?q=How do I write
-a JOIN?` returns 200 with Cases 17, 18, and 1, and the paraphrased
+a JOIN?` returns 200 with Cases 17, 18, and 1, the paraphrased
 question "How can I combine data from two tables?" still returns 3 cases
-including 17 and 18.
+including 17 and 18, `POST /ask` returns 200 with Cases 17, 18, 1 and an
+explanation naming Case 17, and `POST /ask` without an API key returns 503.
+The `/ask` tests use a fake OpenAI client, so pytest costs nothing and
+needs no real key.
 
 ## Tech stack
 
