@@ -1,31 +1,34 @@
-# Day 15: main.py — FastAPI app with vector search (SQL RAG Assistant)
-# This file REPLACES the Day 5 main.py in the repo root (same filename,
+# Day 18: main.py — FastAPI app with POST /ask (SQL RAG Assistant)
+# This file REPLACES the Day 15 main.py in the repo root (same filename,
 # new version). Copy only this file to the sql-rag-assistant folder,
-# next to schema.sql. Do not push the day-15-en folder itself.
+# next to schema.sql. Do not push the day-18-en folder itself.
 #
-# New in Day 15:
-#   GET  /search?q=...      -> top 3 vector matches from Chroma
-#                              (id, title, question, answer_sql) as JSON
-#   GET  / and GET /cases, GET /cases/{id}, POST /cases/{id}/check,
-#   GET  /page              -> unchanged from Day 5
+# New in Day 18:
+#   POST /ask  {"question": "..."} -> the full RAG answer in one call:
+#     {"question": "...",
+#      "cases": [top 3 vector matches, same shape as GET /search],
+#      "explanation": "short LLM explanation naming the cases"}
+#   This is the endpoint the chat box (Day 19) will call. It reuses
+#   Day 15's vector retrieval and Day 16's prompt + gpt-4o-mini call.
 #
-# Prerequisite: Day 13 must have run once so ./chroma_db exists:
-#   py embed_cases.py
-# If chroma_db/ is missing, /search returns 503 with a clear message
-# instead of crashing the whole app — /cases keeps working either way.
+#   If chroma_db/ is missing, /ask returns 503 (same as /search).
+#   If OPENAI_API_KEY is not set, /ask returns 503 with the .env
+#   instructions instead of crashing. If OpenAI rejects the call
+#   (for example 401 bad key, 429 no credits), /ask returns 502
+#   with OpenAI's message, so the page can show it.
 #
-# Usage (in the sql-rag-assistant repo root, after Day 14 is done):
-#   py -m uvicorn main:app --reload
-# Then open in your browser:
-#   http://127.0.0.1:8000/search?q=How%20do%20I%20write%20a%20JOIN%3F
-#   http://127.0.0.1:8000/cases      -> still returns all 18 cases
-#   http://127.0.0.1:8000/docs       -> try /search here too
-# Commit message: add vector search endpoint
+# Prerequisite: Day 13 must have run once so ./chroma_db exists,
+# and .env must hold a real OPENAI_API_KEY with credit (Day 16).
+# No new package is needed: openai and python-dotenv are already
+# in requirements.txt since Day 16.
 #
-# Note: this file only reads the cases Day 2 put into sql_rag.db and
-# the vectors Day 13 put into chroma_db/. It does not invent any case
-# titles, questions, or SQL.
+# Test it in the browser at /docs (POST /ask, Try it out):
+#   {"question": "How do I write a JOIN?"}
+# Done when it returns 200 with cases [17, 18, 1] and an explanation
+# that names Case 17 or 18.
+# Commit message: add ask endpoint that answers with retrieval plus LLM
 
+import os
 import re
 import sqlite3
 from pathlib import Path
@@ -35,6 +38,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed; the key must be set in the terminal
+
 app = FastAPI(title="SQL RAG Assistant")
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -43,6 +53,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "sql_rag.db"
 CHROMA_PATH = BASE_DIR / "chroma_db"
 COLLECTION_NAME = "sql_cases"
+MODEL = "gpt-4o-mini"
 
 
 def get_connection():
@@ -124,8 +135,71 @@ def search_cases(question: str, top_n: int = 3):
     return hits
 
 
+def build_prompt(question: str, cases: list) -> str:
+    """Put the question and the retrieved cases into one prompt.
+
+    Same prompt as Day 16's explain.py: the model only ever sees
+    your book's cases — it explains those, it does not invent new SQL.
+    """
+    lines = [
+        "You explain SQL to a beginner who is learning from a book of "
+        "SQL case studies. Use ONLY the cases below to answer. "
+        "Explain in short, simple words, name the case numbers you use, "
+        "and show one SQL example from the cases.\n",
+        f"Question: {question}\n",
+        "Retrieved cases:",
+    ]
+    for case in cases:
+        lines.append(
+            f"\nCase {case['id']}: {case['title']}\n"
+            f"Question: {case['question']}\n"
+            f"Answer SQL: {case['answer_sql']}"
+        )
+    return "\n".join(lines)
+
+
+def explain_with_llm(question: str, cases: list) -> str:
+    """Ask OpenAI's gpt-4o-mini to explain the retrieved cases."""
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "OPENAI_API_KEY is not set. Create a .env file in the repo "
+                "root with one line: OPENAI_API_KEY=[YOUR_REAL_KEY_HERE] "
+                "(replace with your real key). Never commit .env."
+            ),
+        )
+    from openai import OpenAI
+
+    client = OpenAI(api_key=api_key)
+    try:
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a friendly SQL tutor for beginners. "
+                        "Explain using only the cases given to you."
+                    ),
+                },
+                {"role": "user", "content": build_prompt(question, cases)},
+            ],
+        )
+    except Exception as error:
+        # 401 bad key, 429 no credits, network trouble: report it
+        # as a 502 so the chat box can show OpenAI's own message.
+        raise HTTPException(status_code=502, detail=f"OpenAI call failed: {error}")
+    return response.choices[0].message.content
+
+
 class CheckRequest(BaseModel):
     sql: str
+
+
+class AskRequest(BaseModel):
+    question: str
 
 
 @app.get("/")
@@ -169,3 +243,19 @@ def check_case(case_id: int, body: CheckRequest):
         result["message"] = "Not quite — compare with the book answer:"
         result["expected"] = case["answer_sql"]
     return result
+
+
+@app.post("/ask")
+def ask_question(body: AskRequest):
+    """Full RAG answer: retrieve the top 3 cases, then explain them."""
+    cases = search_cases(body.question)
+    if not cases:
+        raise HTTPException(
+            status_code=503, detail="No cases retrieved. Check that chroma_db/ is built."
+        )
+    explanation = explain_with_llm(body.question, cases)
+    return {
+        "question": body.question,
+        "cases": cases,
+        "explanation": explanation,
+    }
